@@ -36,29 +36,62 @@ from glue.core.exceptions import IncompatibleAttribute
 
 class ClusteringModel:
     """A wrapper for a scikit-learn clustering model."""
-    def __init__(self, model, data, attributes):
+    def __init__(self, model, data, attributes, fit=True):
+        """
+        Parameters
+        ----------
+        model : sklearn2glue.core.model.ClusteringModel
+            The wrapped scikit learn model to use
+        data : glue.core.data.Data
+            The data to use/used to fit the model
+        attributes : list(str)
+            The list of attributes to use
+        fit : bool, optional
+            If true, fit the model during object instanciation. The default is True.
 
+        """
         self._model = model
-        self._fitdata = data
+        self._data = data
         self._attributes = attributes
+        self._component_ids = [data.id[att] for att in attributes]
+
+        if fit:
+            features = self.build_feature_matrix(data)
+            pred = self._model.fit_predict(features)
+            pred = pred.reshape(data.shape)
+        else:
+            pred = self.predict(data)
+        self._n_clusters = pred.max()+1
+
+    @property
+    def n_clusters(self):
+        return self._n_clusters
 
     @property
     def model(self):
         return self._model
 
     @property
-    def fit_data(self):
+    def fitted_data(self):
         return self._data
 
     @property
     def attributes(self):
+        """The list of attributes (as string) used to create the model"""
         return self._attributes
 
     def build_feature_matrix(self, data):
-        return np.column_stack([data[att].ravel() for att in self._attributes])
+        """Build the feature matrix corresponding to the attributes of the model
+
+        Raises:
+        -------
+            IncompatibleAttribute: if the cid cannot be found or calculated
+        """
+        return np.column_stack([data[cid].ravel() for cid in self._component_ids])
 
     @memoize
     def predict(self, data):
+        """Returns the labelling for the data."""
         y_pred = self.model.predict(self.build_feature_matrix(data))
         predict = y_pred.reshape(data.shape)
         return predict

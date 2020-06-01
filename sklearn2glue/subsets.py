@@ -27,46 +27,23 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Define a subset state for a cluster found by a scikit-learn clustering model"""
+from sklearn2glue.core.model import ClusteringModel
+from sklearn2glue.core.subset import ClusterSubsetState
 
-import numpy as np
+def create_model(data, attribute_list, model_class, *args, **kwargs):
+    """Create a custering model using the Glue data"""
+    skmodel = model_class(*args, **kwargs)
+    wrapped_model = ClusteringModel(skmodel, data, attribute_list)
 
-from glue.core.subset import SubsetState
+    return wrapped_model
 
-#  from sklearn2glue.core.model import ClusteringModel
-from glue.core.decorators import memoize
+def fit_and_create_clusters(dc, data_label, attribute_list, model_class, *args, name_pattern=None, **kwargs):
+    """Fit a clustering model and create clusters."""
+    data = dc[data_label]
+    wrapped_model = create_model(data, attribute_list, model_class, *args, **kwargs)
 
-
-class ClusterSubsetState(SubsetState):
-    """A subset state for a cluster found by a scikit-learn clustering model.
-    """
-
-    def __init__(self, model, cluster_number):
-        super().__init__()
-        self._model = model
-        self._cluster = cluster_number
-
-    @property
-    def model(self):
-        return self._model
-
-    @property
-    def attributes(self):
-        return self._model.attributes
-
-    @property
-    def subset_state(self):  # convenience method, mimic interface of Subset
-        return self
-
-    def copy(self):
-        return ClusterSubsetState(self._model, self._cluster_number)
-
-    @memoize
-    def to_mask(self, data, view=None):
-        pred = self.model.predict(data)
-        result = np.asarray(pred == self._cluster)
-        if view is not None:
-            result = result[view]
-        return result
-
-
+    if name_pattern is None:
+        name_pattern = "cluster_{0}"
+    for i in range(wrapped_model.n_clusters):
+        state = ClusterSubsetState(wrapped_model, i)
+        dc.new_subset_group(name_pattern.format(i), state)
